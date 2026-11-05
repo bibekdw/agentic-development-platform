@@ -1,0 +1,27 @@
+{
+  "change_id": "DEMO-001",
+  "repositories": [
+    {
+      "name": "adlc-sample-backend",
+      "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "name": "adlc-sample-worker",
+      "revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    {
+      "name": "adlc-sample-ui",
+      "revision": "cccccccccccccccccccccccccccccccccccccccc"
+    },
+    {
+      "name": "adlc-sample-deploy",
+      "revision": "dddddddddddddddddddddddddddddddddddddddd"
+    }
+  ],
+  "required_checks": [
+    "unit",
+    "integration",
+    "smoke"
+  ],
+  "production_approval_required": true
+}

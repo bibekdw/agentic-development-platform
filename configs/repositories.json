@@ -1,0 +1,9 @@
+{
+  "allowed_repositories": [
+    "adlc-sample-backend",
+    "adlc-sample-worker",
+    "adlc-sample-ui",
+    "adlc-sample-deploy"
+  ],
+  "description": "Generic allowlist for the public sandbox. Clone and change for private projects."
+}

@@ -1,0 +1,1 @@
+The manifest in `change-manifest.json` contains **illustrative fake SHAs** (`aaaa...`, `bbbb...`, etc.). It validates structure only and **must never be used to deploy**. Real release manifests must be generated from actual PR head commits, and the CI process must independently verify that all referenced Git objects exist.
