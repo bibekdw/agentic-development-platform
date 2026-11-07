@@ -23,7 +23,9 @@ tools:
 safe-outputs:
   staged: true
   create-issue: false
-  noop: false
+  noop:
+    max: 1
+    report-as-issue: false
   report-missing-tool: false
   report-missing-data: false
   report-failure-as-issue: false
@@ -86,4 +88,10 @@ Rules:
 - Include explicit references to AGENTS.md, docs/security.md, docs/roadmap.md, and .github/workflows/ci.yml.
 - Include at least one risk statement about failure handling visibility in CI/automation.
 
-Produce the report in this run output only.
+## Delivering the report
+
+This workflow has no write outputs. Do not call `report_incomplete` when the audit finished.
+When the audit is complete, call the `noop` safe-output tool exactly once. Put the complete Markdown report
+(all five sections, including the Findings table and Evidence Index) in its `message` field.
+Do not write the report only to a file; files in the sandbox are not preserved.
+Use `report_incomplete` only if the audit could not be completed, and state what is missing.
