@@ -3,6 +3,7 @@ description: Read-only repository audit for ADLC safety and readiness
 on:
   workflow_dispatch:
 permissions:
+  copilot-requests: write
   contents: read
   issues: read
   pull-requests: read
