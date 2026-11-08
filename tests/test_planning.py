@@ -168,9 +168,11 @@ class ChangeFolder(unittest.TestCase):
     def build(self, root, proposal=None, scenario=True):
         base = Path(root) / "openspec" / "changes" / self.cid
         (base / "specs" / "tasks").mkdir(parents=True)
-        (base / "proposal.md").write_text(proposal or f"{self.cid} {self.story} contract task-api")
+        (base / "proposal.md").write_text(proposal or (
+            f"## Why\n{self.cid} {self.story} contract task-api\n\n## What Changes\n- x\n\n"
+            "## Capabilities\n### New Capabilities\n- `tasks`: limits\n"))
         (base / "design.md").write_text("design")
-        (base / "tasks.md").write_text("- [ ] t")
+        (base / "tasks.md").write_text("## 1. Work\n- [ ] 1.1 t\n")
         sc = "#### Scenario: 201 chars rejected\n" if scenario else ""
         (base / "specs" / "tasks" / "spec.md").write_text(f"## ADDED Requirements\n### Requirement: x\n{sc}")
 
@@ -188,6 +190,22 @@ class ChangeFolder(unittest.TestCase):
     def test_missing_folder(self):
         with tempfile.TemporaryDirectory() as d:
             self.assertTrue(p.validate_change_folder(d, self.cid, self.story))
+
+    def test_proposal_sections_and_capability_listing(self):
+        with tempfile.TemporaryDirectory() as d:
+            self.build(d, proposal=f"## Why\n{self.cid} {self.story} task-api\n")
+            errs = p.validate_change_folder(d, self.cid, self.story, ["task-api"])
+            self.assertTrue(any("What Changes" in x for x in errs), errs)
+            self.assertTrue(any("Capabilities" in x for x in errs), errs)
+            self.assertTrue(any("capability 'tasks'" in x for x in errs), errs)
+
+    def test_tasks_format(self):
+        good = "# Tasks\n\n## 1. Group\n\n- [ ] 1.1 do\n- [x] 1.2 done\n"
+        self.assertEqual(p.check_tasks_format(good), [])
+        self.assertTrue(p.check_tasks_format("- [ ] unnumbered\n"))
+        self.assertTrue(p.check_tasks_format("## 1.1 Heading numbered\n- [ ] sub\n"))
+        self.assertTrue(p.check_tasks_format("## 1. Group\n- [ ] 1.1 ok\n- [ ] missing number\n"))
+        self.assertTrue(p.check_tasks_format("no checklist at all"))
 
 
 if __name__ == "__main__":

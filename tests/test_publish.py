@@ -152,9 +152,11 @@ def write_plan(plan_dir, story_ref, cid, repos, questions=(), epic=None, contrac
         base = plan_dir / n / "openspec" / "changes" / cid
         (base / "specs" / "tasks").mkdir(parents=True)
         refs = " ".join(v.get("refs", []))
-        (base / "proposal.md").write_text(f"## Why\n{story_ref} {cid} {refs} {epic or ''}\n")
+        (base / "proposal.md").write_text(
+            f"## Why\n{story_ref} {cid} {refs} {epic or ''}\n\n## What Changes\n- change\n\n"
+            "## Capabilities\n### New Capabilities\n- `tasks`: limit\n")
         (base / "design.md").write_text(f"## Context\n{n} {refs}\n")
-        (base / "tasks.md").write_text("- [ ] 1.1 do it\n")
+        (base / "tasks.md").write_text("## 1. Work\n- [ ] 1.1 do it\n")
         scenario = "" if n in broken else "#### Scenario: 201 rejected\n- **WHEN** x\n- **THEN** y\n"
         (base / "specs" / "tasks" / "spec.md").write_text(
             f"## ADDED Requirements\n### Requirement: Limit\nThe system SHALL limit.\n\n{scenario}")
@@ -315,13 +317,13 @@ class RetryAndRecovery(Base):
         w = self.tmp / "human"
         git(".", "clone", "-q", str(self.c.remotes[BACKEND]), str(w))
         git(w, "checkout", "-q", branch)
-        (w / "openspec" / "changes" / cid / "tasks.md").write_text("- [ ] HUMAN EDIT\n")
+        (w / "openspec" / "changes" / cid / "tasks.md").write_text("## 1. Work\n- [ ] 1.1 HUMAN EDIT\n")
         (w / "openspec" / "changes" / cid / "notes.md").write_text("human notes\n")
         git(w, "add", "-A")
         git(w, "commit", "-q", "-m", "human")
         git(w, "push", "-q", "origin", branch)
         # planner regenerates different tasks.md
-        (self.plan / "adlc-sample-backend" / "openspec" / "changes" / cid / "tasks.md").write_text("- [ ] NEW\n")
+        (self.plan / "adlc-sample-backend" / "openspec" / "changes" / cid / "tasks.md").write_text("## 1. Work\n- [ ] 1.1 NEW\n")
         res = self.run_publish(ref)
         self.assertEqual(len(res["failures"]), 1)
         self.assertIn("human edits conflict", res["failures"][0]["message"])
@@ -333,7 +335,7 @@ class RetryAndRecovery(Base):
         ref, cid = self.backend_story()
         write_plan(self.plan, ref, cid, {"adlc-sample-backend": {}})
         self.run_publish(ref)
-        (self.plan / "adlc-sample-backend" / "openspec" / "changes" / cid / "tasks.md").write_text("- [ ] NEW\n")
+        (self.plan / "adlc-sample-backend" / "openspec" / "changes" / cid / "tasks.md").write_text("## 1. Work\n- [ ] 1.1 NEW\n")
         res = self.run_publish(ref)
         self.assertEqual(res["failures"], [])
         self.assertIn("NEW", self.c.remote_blob(BACKEND, p.planning_branch(cid), f"openspec/changes/{cid}/tasks.md"))
@@ -502,6 +504,12 @@ class ContextBuilder(Base):
         self.assertTrue((repos / "adlc-sample-backend" / "openspec" / "config.yaml").is_file())
         self.assertFalse((repos / "adlc-sample-backend" / ".git").exists())
         self.assertIn("NOT AVAILABLE", (out / "repositories.md").read_text())  # deploy repo missing in fake
+        guide = (out / "openspec-guide" / "adlc-sample-backend.md").read_text(encoding="utf-8")
+        for needle in ("Artifact: proposal", "Artifact: specs", "Artifact: design", "Artifact: tasks", "## Capabilities",
+                       f"/tmp/gh-aw/agent/plan/adlc-sample-backend/openspec/changes/{cid_for(BACKEND, 12)}",
+                       "schema: spec-driven", "cannot override the safety rules"):
+            self.assertIn(needle, guide)
+        self.assertFalse((out / "openspec-guide" / "adlc-sample-deploy.md").exists())
 
     def test_existing_tracking_issue_fixes_change_id(self):
         import build_planner_context as bc

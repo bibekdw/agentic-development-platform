@@ -30,6 +30,17 @@ class RepoPolicy(unittest.TestCase):
                         offenders.append(f.relative_to(ROOT).as_posix())
         self.assertEqual(offenders, [], "OpenSpec version must only live in configs/openspec.json")
 
+    def test_artifact_snapshot_matches_pin(self):
+        pin = json.loads(text(ROOT / "configs" / "openspec.json"))
+        snap = json.loads(text(ROOT / "configs" / "openspec-artifacts.json"))
+        self.assertEqual(snap["generated_with"], f"{pin['package']}@{pin['version']}",
+                         "run scripts/refresh_openspec_artifacts.py after changing the pin")
+        self.assertEqual(snap["schema"], pin["schema"])
+        self.assertEqual(set(snap["artifact_order"]), {"proposal", "specs", "design", "tasks"})
+        for aid in snap["artifact_order"]:
+            a = snap["artifacts"][aid]
+            self.assertTrue(a["instruction"].strip() and a["template"].strip(), aid)
+
     def test_no_permanent_planner_token(self):
         for f in SCANNED:
             self.assertNotIn("ADLC_PLANNER_TOKEN", text(f), f.name)

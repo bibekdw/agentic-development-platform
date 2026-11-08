@@ -35,6 +35,7 @@ def write_backend_plan(plan_dir, ref, cid):
     (base / "proposal.md").write_text(
         f"## Why\nTask titles are unbounded. Source story: {ref}. Change id: {cid}.\n\n"
         "## What Changes\n- Reject titles longer than 200 characters and blank titles on task creation.\n\n"
+        "## Capabilities\n### New Capabilities\n- `task-titles`: title length limit on task creation\n\n"
         "## Impact\n- Affected: backend task API only. No other repository changes. Out of scope: UI messaging.\n")
     (base / "design.md").write_text("## Context\nTask creation currently accepts any title.\n\n"
                                     "## Decisions\n- Reject with HTTP 400; limit is 200 characters inclusive.\n")
