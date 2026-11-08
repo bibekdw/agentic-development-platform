@@ -1,0 +1,35 @@
+# Copy to .github/ISSUE_TEMPLATE/story.yml in each sample repository.
+# Opening or editing a story never starts an agent; planning is started manually from the platform repo.
+name: ADLC story
+description: Story in its primary implementation repository
+labels: ["story"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem and expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Observable, testable items. Keep the heading text unchanged.
+      placeholder: "- [ ] A title of 200 characters is accepted"
+    validations:
+      required: true
+  - type: input
+    id: epic
+    attributes:
+      label: Epic (optional)
+      description: Fully qualified, e.g. `bibekdw/agentic-development-platform#3`
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Known dependencies
+      description: Fully qualified story references.
+  - type: textarea
+    id: repos
+    attributes:
+      label: Suggested affected repositories (optional)
+      description: A hint only; the planner determines the actual set.

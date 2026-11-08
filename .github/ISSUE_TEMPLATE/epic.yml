@@ -1,0 +1,30 @@
+name: ADLC epic
+description: Epic coordinating several stories (platform repository only)
+labels: ["epic"]
+body:
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Epic acceptance criteria
+      description: Observable, testable items.
+    validations:
+      required: true
+  - type: textarea
+    id: stories
+    attributes:
+      label: Linked stories
+      description: Fully qualified references, e.g. `bibekdw/adlc-sample-backend#12`. Never bare numbers.
+  - type: textarea
+    id: decisions
+    attributes:
+      label: Shared architectural or API decisions
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies between stories

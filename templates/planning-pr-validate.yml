@@ -1,0 +1,45 @@
+name: planning-pr-validate
+# Deterministic validation of ADLC planning PRs (branches adlc/plan/<change-id>).
+# Runs on pull_request with a read-only token and no secrets, so planning PRs opened with a
+# GitHub App token trigger it (PRs opened with GITHUB_TOKEN would not). The validator code and the
+# OpenSpec version live in the platform repository (configs/openspec.json); nothing is duplicated here.
+on:
+  pull_request:
+permissions:
+  contents: read
+env:
+  # Immutable platform commit providing scripts/validate_planning_pr.py and configs/openspec.json.
+  # Set to the full 40-character merge SHA of the platform setup PR; update via a reviewed setup PR only.
+  ADLC_PLATFORM_REF: "REPLACE_WITH_PLATFORM_MERGE_SHA"
+jobs:
+  validate:
+    if: startsWith(github.head_ref, 'adlc/plan/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Require a pinned platform commit
+        run: |
+          if ! printf '%s' "$ADLC_PLATFORM_REF" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "ADLC_PLATFORM_REF must be a full 40-character commit SHA"; exit 1
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: bibekdw/agentic-development-platform
+          ref: ${{ env.ADLC_PLATFORM_REF }}
+          path: .adlc-platform
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+      - name: Validate planning change
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          python3 .adlc-platform/scripts/validate_planning_pr.py --root . \
+            --branch "$HEAD_REF" --base-ref "origin/$BASE_REF" --repository "$GITHUB_REPOSITORY"

@@ -1,4 +1,6 @@
 {
+  "owner": "bibekdw",
+  "authorized_permissions": ["admin", "maintain", "write"],
   "allowed_repositories": [
     "adlc-sample-backend",
     "adlc-sample-worker",
