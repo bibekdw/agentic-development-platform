@@ -71,6 +71,9 @@ class FakeClient:
     def find_tracking_issue(self, platform, story_ref=None, change_id=None):
         return match_tracking(self.tracking, story_ref, change_id)
 
+    def list_open_tracking_issues(self, platform):
+        return [dict(i) for i in self.tracking if not i.get("closed")]
+
     def clone(self, repo, dest, depth=None):
         if repo in self.read_only_failures:
             raise GitHubError("simulated clone failure")
@@ -95,6 +98,8 @@ class FakeClient:
         next(i for i in self.tracking if i["number"] == number)["body"] = body
 
     def upsert_status_comment(self, repo, number, marker, body):
+        if self.comments.get((repo, number, marker)) == body:
+            return  # mirrors GitHubClient: an unchanged comment is not rewritten
         self.writes.append(("comment", repo, number))
         self.comments[(repo, number, marker)] = body
 
@@ -485,6 +490,65 @@ class MultiRepository(Base):
         metas[UI]["contract_refs"] = ["task-title-api"]
         metas[UI]["planning_revision"] = 9
         self.assertTrue(p.cross_check_plans(rec, metas))
+
+
+class ScheduledReconcile(Base):
+    def published(self, n=12):
+        ref, cid = self.backend_story(n)
+        write_plan(self.plan, ref, cid, {"adlc-sample-backend": {}})
+        self.run_publish(ref)
+        return ref, cid
+
+    def test_all_marks_merged_change_ready_and_then_skips_it(self):
+        ref, cid = self.published()
+        self.c.set_pr(BACKEND, p.planning_branch(cid), "MERGED", SHA_A)
+        out = rc.reconcile_all(self.c, CFG, PLATFORM)
+        self.assertEqual(out["failures"], [])
+        self.assertEqual([r["status"] for r in out["results"]], [p.STATUS_READY])
+        self.assertIn("Ready for implementation", list(self.c.comments.values())[0])
+        writes = list(self.c.writes)
+        out = rc.reconcile_all(self.c, CFG, PLATFORM)
+        self.assertTrue(out["results"][0].get("skipped"))
+        self.assertEqual(self.c.writes, writes)
+
+    def test_all_is_quiet_when_nothing_changed(self):
+        self.published()
+        rc.reconcile_all(self.c, CFG, PLATFORM)
+        writes = list(self.c.writes)
+        out = rc.reconcile_all(self.c, CFG, PLATFORM)
+        self.assertEqual(out["failures"], [])
+        self.assertEqual(out["results"][0]["status"], p.STATUS_REVIEW)
+        self.assertEqual(self.c.writes, writes)
+
+    def test_all_dry_run_writes_nothing(self):
+        ref, cid = self.published()
+        self.c.set_pr(BACKEND, p.planning_branch(cid), "MERGED", SHA_A)
+        writes = list(self.c.writes)
+        out = rc.reconcile_all(self.c, CFG, PLATFORM, dry_run=True)
+        self.assertEqual(out["results"][0]["status"], p.STATUS_READY)
+        self.assertEqual(self.c.writes, writes)
+
+    def test_all_continues_after_a_broken_issue_and_reports_it(self):
+        self.c.tracking.append({"number": 7, "title": "[ADLC plan] x/y#1 broken", "body": "no record here"})
+        ref, cid = self.published()
+        self.c.set_pr(BACKEND, p.planning_branch(cid), "MERGED", SHA_A)
+        out = rc.reconcile_all(self.c, CFG, PLATFORM)
+        self.assertEqual(len(out["failures"]), 1)
+        self.assertEqual(out["failures"][0]["change"], "#7")
+        self.assertEqual([r["status"] for r in out["results"]], [p.STATUS_READY])
+
+    def test_all_ignores_closed_tracking_issues(self):
+        ref, cid = self.published()
+        self.c.tracking[0]["closed"] = True
+        self.c.set_pr(BACKEND, p.planning_branch(cid), "MERGED", SHA_A)
+        out = rc.reconcile_all(self.c, CFG, PLATFORM)
+        self.assertEqual(out, {"results": [], "failures": []})
+
+    def test_cli_requires_exactly_one_of_change_id_or_all(self):
+        for argv in ([PLATFORM], [PLATFORM, "some-id", "--all"]):
+            with self.assertRaises(SystemExit) as ctx:
+                rc.main(argv)
+            self.assertEqual(ctx.exception.code, 2)
 
 
 class ContextBuilder(Base):

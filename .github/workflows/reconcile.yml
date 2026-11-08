@@ -1,13 +1,17 @@
 name: adlc-reconcile
-# Manual reconciliation: refresh planning PR states, record approvals (merged SHA + revision),
-# recompute readiness, update the tracking issue and the single story status comment.
-# Required even if event-driven updates are added later.
+# Refresh planning PR states, record approvals (merged SHA + revision), recompute readiness,
+# update the tracking issue and the single story status comment.
+# Runs on a schedule for every open coordination issue (already Ready or cancelled ones are skipped,
+# unchanged ones are not rewritten) and can be dispatched by hand for one change or for all.
 on:
+  schedule:
+    - cron: "*/15 * * * *"
   workflow_dispatch:
     inputs:
       change_id:
-        description: "Change ID to reconcile (from the tracking issue title)"
-        required: true
+        description: "Change ID to reconcile (from the tracking issue title). Leave empty to reconcile all open changes"
+        required: false
+        default: ""
         type: string
       dry_run:
         description: "Compute and print status only; write nothing to GitHub"
@@ -59,7 +63,7 @@ jobs:
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
           set -o pipefail
-          ARGS=("$GITHUB_REPOSITORY" "$CHANGE_ID")
+          if [ -n "$CHANGE_ID" ]; then ARGS=("$GITHUB_REPOSITORY" "$CHANGE_ID"); else ARGS=("$GITHUB_REPOSITORY" --all); fi
           if [ "$DRY_RUN" = "true" ]; then ARGS+=(--dry-run); fi
           python3 scripts/reconcile.py "${ARGS[@]}" 2>&1 | tee "$RUNNER_TEMP/reconcile.log"
       - if: always()
