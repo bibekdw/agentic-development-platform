@@ -251,6 +251,15 @@ files and opens draft planning PRs; humans approve by merging them.
      - **WHEN** a task is created with a 200-character title
      - **THEN** the system responds with HTTP 201
      ```
+   - **Scope discipline (all artifacts).**
+     1. Write scenarios and test tasks only for behavior stated in, or directly derivable from, the story's
+        acceptance criteria. Do not add extra cases of your own (other input values, additional edge cases). If you
+        believe one is missing, mention it under `## Risks / Trade-offs` in `design.md`; do not put it in a spec or
+        in `tasks.md`.
+     2. Do not restate behavior that already exists as its own `## ADDED Requirements`. Existing behavior that must
+        keep working belongs in `design.md` (Context or Non-Goals). If an acceptance criterion explicitly names it
+        (for example "blank titles are still rejected"), cover it with a scenario under the requirement it
+        belongs to. Use `## MODIFIED Requirements` only when the story changes an existing requirement.
 5. A contract shared by several repositories (an API, event or schema) has exactly one **authoritative owner**
    repository that defines it in one delta spec file. Consumers reference it by id only.
 6. Write `/tmp/gh-aw/agent/plan/plan.json` **last**, exactly with these keys:
