@@ -80,7 +80,9 @@ jobs:
           STORY: ${{ inputs.story_repo }}#${{ inputs.story_number }}
           ACTOR: ${{ github.actor }}
           COMMENT: ${{ inputs.dry_run != true && '--comment' || '' }}
-        run: python3 scripts/preflight.py "$STORY" "$ACTOR" --platform "$GITHUB_REPOSITORY" $COMMENT
+        run: |
+          python3 scripts/mask_token.py
+          python3 scripts/preflight.py "$STORY" "$ACTOR" --platform "$GITHUB_REPOSITORY" $COMMENT
       - if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -109,6 +111,7 @@ steps:
       GH_TOKEN: ${{ steps.app.outputs.token }}
       STORY: ${{ inputs.story_repo }}#${{ inputs.story_number }}
     run: |
+      python3 scripts/mask_token.py
       mkdir -p /tmp/gh-aw/agent/plan
       python3 scripts/build_planner_context.py --story "$STORY" --platform "$GITHUB_REPOSITORY" \
         --out "$GITHUB_WORKSPACE/adlc-context" --repos "$GITHUB_WORKSPACE/adlc-context/repos"
@@ -173,6 +176,7 @@ safe-outputs:
             RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           run: |
             set -o pipefail
+            python3 scripts/mask_token.py
             test "$(jq '[.items[] | select(.type == "submit_plan")] | length' "$GH_AW_AGENT_OUTPUT")" = "1" \
               || { echo "expected exactly one submit_plan call"; exit 1; }
             PLAN_DIR="$(dirname "$GH_AW_AGENT_OUTPUT")/agent/plan"   # fixed path, never agent-supplied

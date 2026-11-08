@@ -6,11 +6,15 @@ the gate that decides whether implementation may start, the strict diff rules th
 satisfy, and the record updates. The agent cannot choose paths outside the profile, touch build, CI,
 policy or main-spec files, or mark tasks other than by ticking checkboxes.
 """
+import base64
+import binascii
 import copy
+import io
 import json
 import re
 import sys
-from pathlib import Path
+import tarfile
+from pathlib import Path, PurePosixPath
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import planning as p  # noqa: E402
@@ -151,6 +155,42 @@ def prepare_patched_tree(base_dir, agent_dir, dest_dir, change_id, prof):
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(data)
     return changed
+
+
+def unpack_tree(pack_file, dest):
+    """Extract the agent's base64 tar.gz working copy. Only regular files and directories are accepted;
+    absolute paths, `..`, symlinks, hardlinks and devices are rejected. Returns the file count."""
+    try:
+        raw = base64.b64decode(Path(pack_file).read_text(encoding="ascii").strip(), validate=True)
+    except (OSError, ValueError, binascii.Error) as exc:
+        raise ImplRejected([f"the agent working copy is missing or not valid base64: {exc}"])
+    dest = Path(dest)
+    dest.mkdir(parents=True, exist_ok=True)
+    files = total = 0
+    try:
+        with tarfile.open(fileobj=io.BytesIO(raw), mode="r:gz") as tf:
+            for m in tf:
+                name = PurePosixPath(m.name)
+                parts = [x for x in name.parts if x != "."]
+                if not parts:
+                    continue
+                if name.is_absolute() or ".." in parts or "\\" in m.name:
+                    raise ImplRejected([f"unsafe path in working copy: {m.name}"])
+                target = dest.joinpath(*parts)
+                if m.isdir():
+                    target.mkdir(parents=True, exist_ok=True)
+                    continue
+                if not m.isreg():
+                    raise ImplRejected([f"symlink or special file not allowed: {m.name}"])
+                files += 1
+                total += m.size
+                if files > MAX_TREE_FILES or total > MAX_TREE_BYTES:
+                    raise ImplRejected(["working copy is too large"])
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(tf.extractfile(m).read())
+    except (tarfile.TarError, EOFError, OSError) as exc:
+        raise ImplRejected([f"working copy archive is invalid: {exc}"])
+    return files
 
 
 # --------------------------------------------------------------------------- gate and statuses

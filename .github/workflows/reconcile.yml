@@ -63,6 +63,7 @@ jobs:
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
           set -o pipefail
+          python3 scripts/mask_token.py
           if [ -n "$CHANGE_ID" ]; then ARGS=("$GITHUB_REPOSITORY" "$CHANGE_ID"); else ARGS=("$GITHUB_REPOSITORY" --all); fi
           if [ "$DRY_RUN" = "true" ]; then ARGS+=(--dry-run); fi
           python3 scripts/reconcile.py "${ARGS[@]}" 2>&1 | tee "$RUNNER_TEMP/reconcile.log"
