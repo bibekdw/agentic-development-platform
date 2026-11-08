@@ -1,0 +1,15 @@
+{
+    "package":  "@fission-ai/openspec",
+    "version":  "1.15.0",
+    "schema":  "spec-driven",
+    "node_min":  "20.19.0",
+    "validate_args":  [
+                          "validate",
+                          "{change_id}",
+                          "--type",
+                          "change",
+                          "--strict",
+                          "--no-interactive"
+                      ],
+    "note":  "Single authoritative OpenSpec pin. Workflows and scripts read this file; do not copy the version elsewhere. Tested 1.15.0 (latest at test time was 1.16.1). Change only via a separate setup PR after re-running the validation checks."
+}

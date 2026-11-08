@@ -1,0 +1,70 @@
+name: adlc-reconcile
+# Manual reconciliation: refresh planning PR states, record approvals (merged SHA + revision),
+# recompute readiness, update the tracking issue and the single story status comment.
+# Required even if event-driven updates are added later.
+on:
+  workflow_dispatch:
+    inputs:
+      change_id:
+        description: "Change ID to reconcile (from the tracking issue title)"
+        required: true
+        type: string
+      dry_run:
+        description: "Compute and print status only; write nothing to GitHub"
+        required: true
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: adlc-planning-global
+  cancel-in-progress: false
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: scope
+        run: python3 scripts/app_scope.py "${GITHUB_REPOSITORY#*/}"
+      # Short-lived installation token minted from the App credentials at runtime.
+      - id: app_read
+        if: ${{ inputs.dry_run == true }}
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.ADLC_APP_CLIENT_ID }}
+          private-key: ${{ secrets.ADLC_APP_PRIVATE_KEY }}
+          owner: ${{ steps.scope.outputs.owner }}
+          repositories: ${{ steps.scope.outputs.repositories }}
+          permission-contents: read
+          permission-issues: read
+          permission-pull-requests: read
+      - id: app_write
+        if: ${{ inputs.dry_run != true }}
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.ADLC_APP_CLIENT_ID }}
+          private-key: ${{ secrets.ADLC_APP_PRIVATE_KEY }}
+          owner: ${{ steps.scope.outputs.owner }}
+          repositories: ${{ steps.scope.outputs.repositories }}
+          permission-contents: read
+          permission-issues: write
+          permission-pull-requests: read
+      - name: Reconcile
+        env:
+          GH_TOKEN: ${{ steps.app_read.outputs.token || steps.app_write.outputs.token }}
+          CHANGE_ID: ${{ inputs.change_id }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -o pipefail
+          ARGS=("$GITHUB_REPOSITORY" "$CHANGE_ID")
+          if [ "$DRY_RUN" = "true" ]; then ARGS+=(--dry-run); fi
+          python3 scripts/reconcile.py "${ARGS[@]}" 2>&1 | tee "$RUNNER_TEMP/reconcile.log"
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: reconcile-diagnostics
+          path: ${{ runner.temp }}/reconcile.log
+          if-no-files-found: ignore
