@@ -112,5 +112,58 @@ class RepoPolicy(unittest.TestCase):
         self.assertNotIn("pull_request_target", body)
 
 
+class ImplementWorkflowPolicy(unittest.TestCase):
+    MD = WORKFLOWS / "adlc-implement.md"
+    LOCK = WORKFLOWS / "adlc-implement.lock.yml"
+
+    def front(self):
+        return text(self.MD).split("---")[1]
+
+    def test_manual_only_and_dry_run_default(self):
+        front = self.front()
+        trigger = front.split("permissions:")[0]
+        self.assertIn("workflow_dispatch", trigger)
+        for t in ("schedule:", "cron:", "issues:", "issue_comment:", "pull_request:", "push:"):
+            self.assertNotRegex(trigger, rf"(?m)^\s*{t}")
+        self.assertRegex(front, r"dry_run:[\s\S]*?default: true")
+
+    def test_bounded_serialized_and_pinned(self):
+        front = self.front()
+        for key in ("timeout-minutes:", "max-turns:", "max-ai-credits:", "adlc-planning-global"):
+            self.assertIn(key, front)
+        for m in re.finditer(r"uses:\s*([^\s#]+)", text(self.MD)):
+            self.assertRegex(m.group(1), r"@[0-9a-f]{40}$", m.group(1))
+
+    def test_credentials_and_permissions(self):
+        for f in (self.MD, self.LOCK):
+            body = text(f)
+            self.assertNotRegex(body, r"permission-(administration|workflows|actions)\s*:\s*write")
+            self.assertNotRegex(body, r"\badministration\s*:")
+        self.assertLessEqual(set(re.findall(r"secrets\.([A-Z0-9_]+)", text(self.MD))), {"ADLC_APP_PRIVATE_KEY"})
+        self.assertNotIn("ADLC_PLANNER_TOKEN", text(self.MD))
+
+    def test_agent_has_no_github_tools_or_write_safe_outputs(self):
+        front = self.front()
+        self.assertNotIn("github:", front.split("safe-outputs:")[0].split("tools:")[1].split("jobs:")[0])
+        for forbidden in ("create-pull-request", "merge-pull-request", "create-issue: true", "add-comment"):
+            self.assertNotIn(forbidden, front)
+
+    def test_write_token_minted_only_after_isolated_verification(self):
+        body = text(self.MD)
+        self.assertLess(body.index("Verify in isolated container"), body.index("id: app_write", body.index("submit-implementation")))
+        verify = body.split("Verify in isolated container")[1].split("- id: app_write")[0]
+        self.assertNotIn("GH_TOKEN", verify)
+        self.assertNotIn("secrets.", verify)
+        self.assertIn("--cap-drop ALL", verify)
+
+    def test_implementation_profile_is_opt_in_and_excludes_policy_paths(self):
+        cfg = json.loads(text(ROOT / "configs" / "repositories.json"))["implementation"]
+        self.assertLessEqual(set(cfg["repositories"]), {"adlc-sample-backend", "adlc-sample-worker",
+                                                        "adlc-sample-ui", "adlc-sample-deploy"})
+        for prefix in cfg["default"]["allowed_path_prefixes"]:
+            self.assertFalse(prefix.startswith((".github", "openspec", "AGENTS")), prefix)
+            self.assertTrue(prefix.endswith("/"))
+
+
 if __name__ == "__main__":
     unittest.main()

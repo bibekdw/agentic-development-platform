@@ -238,6 +238,12 @@ def tracking_body(rec, status, reasons):
         lines.append(f"| {r['name']} | {pr} | {r['pr_state']} | {sha_} | {r.get('approved_revision', '-')} |")
     if reasons:
         lines += ["", "Outstanding:"] + [f"- {x}" for x in reasons]
+    impl_rows = (rec.get("implementation") or {})
+    if impl_rows:
+        lines += ["", "| Repository | Implementation PR | State | Merged SHA | Verify exit |", "|---|---|---|---|---|"]
+        for name, im in impl_rows.items():
+            lines.append(f"| {name} | #{im.get('pr')} | {im.get('pr_state')} | {(im.get('merged_sha') or '-')[:12]} | "
+                         f"{(im.get('verify') or {}).get('exit_code', '-')} |")
     return "\n".join(lines) + "\n\n" + p.render_record_block(rec)
 
 

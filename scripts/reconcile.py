@@ -7,8 +7,7 @@ Usage:
 
 Reads PR states, records approvals (merged SHA + revision), recomputes the deterministic
 status and updates the tracking issue and the single story status comment. It never merges,
-closes or edits planning PRs. `--all` skips changes that are already Ready for implementation
-or cancelled, only writes when something changed, and keeps going if one change fails.
+closes or edits planning PRs. `--all` skips changes that are already Implemented, cancelled, or Ready with no implementation started, only writes when something changed, and keeps going if one change fails.
 """
 import argparse
 import json
@@ -17,10 +16,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import planning as p  # noqa: E402
+import implementation as impl  # noqa: E402
 from ghclient import GitHubClient, GitHubError, observe_prs  # noqa: E402
 from publish_plan import tracking_body  # noqa: E402
 
-TERMINAL = (p.STATUS_READY, p.STATUS_CANCELLED)
+TERMINAL = (p.STATUS_IMPLEMENTED, p.STATUS_CANCELLED)
 
 
 def _allowed(cfg):
@@ -32,6 +32,8 @@ def _reconcile_issue(client, cfg, platform, issue, change_id, dry_run):
     if rec["change_id"] != change_id:
         raise SystemExit("coordination record does not match the requested change id")
     rec = p.apply_pr_states(rec, observe_prs(client, rec))
+    if rec.get("implementation"):
+        rec = impl.apply_impl_pr_states(rec, impl.observe_impl_prs(client, rec))
     status, reasons = p.compute_status(rec, _allowed(cfg))
     if rec["open_questions"] and status != p.STATUS_CANCELLED:
         status, reasons = p.STATUS_CLARIFY, rec["open_questions"]
@@ -63,7 +65,7 @@ def reconcile_all(client, cfg, platform, dry_run=False):
             change_id = rec["change_id"]
             label = change_id
             stored, _ = p.compute_status(rec, _allowed(cfg))
-            if stored in TERMINAL:
+            if stored in TERMINAL or (stored == p.STATUS_READY and not rec.get("implementation")):
                 results.append({"change_id": change_id, "status": stored, "skipped": True})
                 continue
             res = _reconcile_issue(client, cfg, platform, issue, change_id, dry_run)

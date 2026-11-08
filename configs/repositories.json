@@ -7,5 +7,21 @@
     "adlc-sample-ui",
     "adlc-sample-deploy"
   ],
-  "description": "Generic allowlist for the public sandbox. Clone and change for private projects."
+  "description": "Generic allowlist for the public sandbox. Clone and change for private projects.",
+  "implementation": {
+    "default": {
+      "allowed_path_prefixes": ["src/"],
+      "max_files": 30,
+      "max_total_bytes": 400000
+    },
+    "repositories": {
+      "adlc-sample-backend": {
+        "verify": {
+          "image": "maven:3.9-eclipse-temurin-21",
+          "command": ["mvn", "-B", "--no-transfer-progress", "verify"],
+          "timeout_minutes": 20
+        }
+      }
+    }
+  }
 }
