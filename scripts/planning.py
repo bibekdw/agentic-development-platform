@@ -26,6 +26,8 @@ STATUS_PLANNING = "Planning"
 STATUS_REVIEW = "Plan under review"
 STATUS_FAILED = "Plan validation failed"
 STATUS_READY = "Ready for implementation"
+STATUS_IMPL_REVIEW = "Implementation in review"
+STATUS_IMPLEMENTED = "Implemented"
 STATUS_BLOCKED = "Blocked by dependency"
 STATUS_CANCELLED = "Cancelled"
 
@@ -209,7 +211,20 @@ def compute_status(rec, allowed=None):
     pending = [r["name"] for r in repos if r["validation"] != "passed"]
     if pending:
         return STATUS_REVIEW, [f"{n}: validation not yet passed" for n in pending]
-    return STATUS_READY, []
+    return implementation_status(rec)
+
+
+def implementation_status(rec):
+    """Status once the plan is fully approved: Ready, Implementation in review, or Implemented."""
+    impl = rec.get("implementation") or {}
+    names = [r["name"] for r in rec["repositories"]]
+    open_ = [n for n in names if (impl.get(n) or {}).get("pr_state") == "open"]
+    if open_:
+        return STATUS_IMPL_REVIEW, [f"{n}: implementation PR #{impl[n].get('pr')} awaiting merge" for n in open_]
+    if impl and all((impl.get(n) or {}).get("pr_state") == "merged" for n in names):
+        return STATUS_IMPLEMENTED, []
+    waiting = [n for n in names if (impl.get(n) or {}).get("pr_state") != "merged"]
+    return STATUS_READY, ([f"implementation pending: {', '.join(waiting)}"] if impl else [])
 
 
 def apply_pr_states(rec, prs):
@@ -407,6 +422,11 @@ def render_status_comment(rec, status, reasons):
         pr = f"#{r['plan_pr']}" if r.get("plan_pr") else "-"
         sha = f" @ `{r['merged_sha'][:12]}`" if r.get("merged_sha") else ""
         lines.append(f"- {r['name']}: PR {pr} {r['pr_state']}{sha}")
+    for name, im in (rec.get("implementation") or {}).items():
+        isha = f" @ `{im['merged_sha'][:12]}`" if im.get("merged_sha") else ""
+        verify = (im.get("verify") or {}).get("exit_code")
+        lines.append(f"- {name}: implementation PR #{im.get('pr')} {im.get('pr_state')}{isha}"
+                     + (f" (verify exit {verify})" if verify is not None else ""))
     if reasons:
         lines += ["", "Outstanding:"] + [f"- {x}" for x in reasons]
     if rec.get("last_failure"):

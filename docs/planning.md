@@ -141,3 +141,16 @@ See the final report of the implementing change. Unit tests use mocked GitHub AP
 bare repositories and the **real pinned OpenSpec CLI**. Behavior that only a GitHub runtime can show (App token
 minting, artifact layout between jobs, agent tool availability, threat detection, PR checks being triggered,
 `gh` calls against live repos) is listed in the first-live-run checklist.
+
+## Implementation phase (after "Ready for implementation")
+
+Manual workflow `adlc-implement` (inputs: story repo, story number, target repo, dry run - default true), one repository per run.
+
+1. **Gate** (deterministic): record is Ready, the repo's plan PR is merged and approved for the current revision, dependencies are implemented, the repo has an entry under `implementation.repositories` in `configs/repositories.json`, the requester has write access, and no implementation PR is already open.
+2. **Agent** edits only a working copy (no credentials). It may run the repo's build in its sandbox; that result is a hint only.
+3. **Validate**: the diff against the pristine base commit may touch only `allowed_path_prefixes` (default `src/`) and tick checkboxes in the change's `tasks.md`. Build files, `.github/`, `AGENTS.md`, `openspec/specs/`, symlinks, binaries and oversized diffs are rejected.
+4. **Isolated verify**: the validated tree is built in a container with no secrets (`implementation.repositories.<repo>.verify`). Only then is the write token minted.
+5. **Publish**: a DRAFT PR on `adlc/impl/<change-id>`; a failed verification opens no PR and is recorded in the status comment.
+6. The repo's own CI runs; a human reviews and merges. `reconcile` then records "Implementation in review" -> "Implemented" (all affected repos merged).
+
+Retry after a failure is a manual re-dispatch. Merging the implementation PR is the acceptance of the code; nothing is merged or deployed automatically.
