@@ -74,6 +74,7 @@ jobs:
           TARGET: ${{ inputs.repo }}
           ACTOR: ${{ github.actor }}
         run: |
+          python3 scripts/mask_token.py
           python3 scripts/implement.py gate --story "$STORY" --repo "$TARGET" --platform "$GITHUB_REPOSITORY" --actor "$ACTOR" | tee "$RUNNER_TEMP/gate.json" || true
       - if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -108,9 +109,23 @@ steps:
       STORY: ${{ inputs.story_repo }}#${{ inputs.story_number }}
       TARGET: ${{ inputs.repo }}
     run: |
+      python3 scripts/mask_token.py
       mkdir -p /tmp/gh-aw/agent/impl
       python3 scripts/implement.py context --story "$STORY" --repo "$TARGET" --platform "$GITHUB_REPOSITORY" \
         --out "$GITHUB_WORKSPACE/adlc-context" --impl-dir /tmp/gh-aw/agent/impl
+# Runs after the agent. Packs the working copy into a text-typed file so the artifact upload keeps it.
+post-steps:
+  - name: Pack the working copy
+    env:
+      TARGET: ${{ inputs.repo }}
+    run: |
+      set -euo pipefail
+      [[ "$TARGET" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || { echo "invalid repo name"; exit 1; }
+      SRC="/tmp/gh-aw/agent/impl/$TARGET"
+      mkdir -p /tmp/gh-aw/agent/impl/_pack
+      tar czf - --exclude=target --exclude=.git --exclude=node_modules --exclude=.m2 --exclude=.gradle \
+        -C "$SRC" . | base64 -w0 > /tmp/gh-aw/agent/impl/_pack/tree.b64.txt
+      test "$(stat -c%s /tmp/gh-aw/agent/impl/_pack/tree.b64.txt)" -lt 70000000 || { echo "working copy too large"; exit 1; }
 safe-outputs:
   noop:
     max: 1
@@ -148,7 +163,14 @@ safe-outputs:
             [[ "$TARGET" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || { echo "invalid repo name"; exit 1; }
             test "$(jq '[.items[] | select(.type == "submit_implementation")] | length' "$GH_AW_AGENT_OUTPUT")" = "1" \
               || { echo "expected exactly one submit_implementation call"; exit 1; }
-            echo "agent_dir=$(dirname "$GH_AW_AGENT_OUTPUT")/agent/impl/$TARGET" >> "$GITHUB_OUTPUT"
+            echo "pack=$(dirname "$GH_AW_AGENT_OUTPUT")/agent/impl/_pack/tree.b64.txt" >> "$GITHUB_OUTPUT"
+            echo "agent_dir=$RUNNER_TEMP/agent-tree" >> "$GITHUB_OUTPUT"
+        # The agent artifact only keeps text file types (md, json, txt, ...), so the working copy travels as a
+        # base64 tarball (.txt). It is extracted by code that accepts regular files only (no symlinks/devices).
+        - name: Unpack the agent working copy
+          env:
+            PACK: ${{ steps.where.outputs.pack }}
+          run: python3 scripts/implement.py unpack --pack "$PACK" --out "$RUNNER_TEMP/agent-tree"
         - id: app_read
           uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
           with:
@@ -167,6 +189,7 @@ safe-outputs:
             AGENT_DIR: ${{ steps.where.outputs.agent_dir }}
           run: |
             set -o pipefail
+            python3 scripts/mask_token.py
             python3 scripts/implement.py prepare --story "$STORY" --repo "$TARGET" --platform "$GITHUB_REPOSITORY" \
               --agent-dir "$AGENT_DIR" --out "$RUNNER_TEMP/adlc-prep" 2>&1 | tee "$RUNNER_TEMP/prepare.log"
         # Verification runs in a container with NO secrets: no token, no workspace, no environment passthrough.
@@ -209,6 +232,7 @@ safe-outputs:
             RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           run: |
             set -o pipefail
+            python3 scripts/mask_token.py
             ARGS=(--story "$STORY" --repo "$TARGET" --platform "$GITHUB_REPOSITORY" --agent-dir "$AGENT_DIR" \
               --verify-result "$RUNNER_TEMP/verify-result.json" --run-url "$RUN_URL" --out "$RUNNER_TEMP/adlc-out")
             if [ "$DRY_RUN" = "true" ]; then ARGS+=(--dry-run); fi

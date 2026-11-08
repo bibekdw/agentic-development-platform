@@ -165,5 +165,20 @@ class ImplementWorkflowPolicy(unittest.TestCase):
             self.assertTrue(prefix.endswith("/"))
 
 
+class TokenHygiene(unittest.TestCase):
+    def test_runner_mask_command_is_never_printed_by_library_code(self):
+        for f in (ROOT / "scripts").glob("*.py"):
+            if f.name != "mask_token.py":
+                self.assertNotIn("::add-mask::", text(f), f.name)
+
+    def test_workflows_mask_token_separately_and_pack_working_copy(self):
+        for f in (WORKFLOWS / "adlc-plan-story.md", WORKFLOWS / "adlc-implement.md", WORKFLOWS / "reconcile.yml"):
+            body = text(f)
+            self.assertGreaterEqual(body.count("scripts/mask_token.py"), body.count("GH_TOKEN:") - 1, f.name)
+        body = text(WORKFLOWS / "adlc-implement.md")
+        self.assertIn("post-steps:", body)
+        self.assertIn("tree.b64.txt", body)
+
+
 if __name__ == "__main__":
     unittest.main()

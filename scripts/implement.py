@@ -225,6 +225,9 @@ def _out(name, value):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
+    u = sub.add_parser("unpack")
+    u.add_argument("--pack", type=Path, required=True)
+    u.add_argument("--out", type=Path, required=True)
     for name in ("gate", "context", "prepare", "publish"):
         s = sub.add_parser(name)
         s.add_argument("--story", required=True)
@@ -245,6 +248,13 @@ def main(argv=None):
             s.add_argument("--dry-run", action="store_true")
             s.add_argument("--out", type=Path)
     a = ap.parse_args(argv)
+    if a.cmd == "unpack":  # needs no credentials
+        try:
+            print(json.dumps({"files": impl.unpack_tree(a.pack, a.out)}))
+            return 0
+        except impl.ImplRejected as exc:
+            print("IMPLEMENTATION REJECTED:\n" + "\n".join(f"- {x}" for x in exc.errors))
+            return 2
     cfg, client = load_cfg(), GitHubClient()
     try:
         if a.cmd == "gate":

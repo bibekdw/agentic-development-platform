@@ -69,7 +69,8 @@ class GitHubClient:
         if not token:
             raise GitHubError("GH_TOKEN is not set")
         basic = base64.b64encode(f"x-access-token:{token}".encode()).decode()
-        print(f"::add-mask::{basic}")  # the encoded form is not auto-masked by Actions
+        # The Basic-auth form is masked by scripts/mask_token.py, run as its own step command: printing the
+        # runner command here would put the credential into any log file or artifact that captures stdout.
         self._git_env = {"GIT_CONFIG_COUNT": "1",
                          "GIT_CONFIG_KEY_0": "http.https://github.com/.extraheader",
                          "GIT_CONFIG_VALUE_0": f"AUTHORIZATION: basic {basic}"}

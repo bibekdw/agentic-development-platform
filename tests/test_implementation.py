@@ -2,9 +2,13 @@
 
 GitHub is faked (see test_publish.FakeClient); git is real against local bare repositories.
 """
+import base64
 import copy
+import io
 import json
 import sys
+import tarfile
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -54,6 +58,58 @@ class PathRules(unittest.TestCase):
     def test_profile_requires_opt_in(self):
         self.assertIsNone(impl.profile(ICFG, "adlc-sample-ui"))
         self.assertEqual(impl.profile(ICFG, "adlc-sample-backend")["max_files"], 30)
+
+
+class PackRules(unittest.TestCase):
+    """The agent artifact only keeps text file types, so the working copy travels as base64 tar.gz."""
+
+    def pack(self, build):
+        buf = io.BytesIO()
+        with tarfile.open(fileobj=buf, mode="w:gz") as tf:
+            build(tf)
+        f = Path(tempfile.mkdtemp()) / "tree.b64.txt"
+        f.write_text(base64.b64encode(buf.getvalue()).decode())
+        return f
+
+    @staticmethod
+    def add(tf, name, data=b"x", typ=tarfile.REGTYPE, link=""):
+        info = tarfile.TarInfo(name)
+        info.type, info.linkname = typ, link
+        info.size = len(data) if typ == tarfile.REGTYPE else 0
+        tf.addfile(info, io.BytesIO(data) if typ == tarfile.REGTYPE else None)
+
+    def test_roundtrip_includes_hidden_and_non_text_types(self):
+        def build(tf):
+            self.add(tf, "./pom.xml", b"<p/>")
+            self.add(tf, "./src/main/A.java", b"class A {}")
+            self.add(tf, "./.adlc-base-sha", b"a" * 40)
+            self.add(tf, "./Dockerfile", b"FROM x")
+        out = Path(tempfile.mkdtemp())
+        self.assertEqual(impl.unpack_tree(self.pack(build), out), 4)
+        self.assertEqual((out / "src/main/A.java").read_bytes(), b"class A {}")
+        self.assertTrue((out / ".adlc-base-sha").is_file())
+
+    def test_unsafe_members_rejected(self):
+        cases = {"symlink": lambda tf: self.add(tf, "src/l", typ=tarfile.SYMTYPE, link="/etc/passwd"),
+                 "hardlink": lambda tf: self.add(tf, "src/h", typ=tarfile.LNKTYPE, link="pom.xml"),
+                 "traversal": lambda tf: self.add(tf, "../evil.txt"),
+                 "absolute": lambda tf: self.add(tf, "/tmp/evil.txt")}
+        for label, build in cases.items():
+            out = Path(tempfile.mkdtemp())
+            with self.assertRaises(impl.ImplRejected, msg=label):
+                impl.unpack_tree(self.pack(build), out)
+            self.assertEqual(list(out.iterdir()), [], label)
+
+    def test_invalid_archives_rejected(self):
+        bad = Path(tempfile.mkdtemp()) / "t.txt"
+        bad.write_text("not base64 !!!")
+        with self.assertRaises(impl.ImplRejected):
+            impl.unpack_tree(bad, Path(tempfile.mkdtemp()))
+        bad.write_text(base64.b64encode(b"not a tarball").decode())
+        with self.assertRaises(impl.ImplRejected):
+            impl.unpack_tree(bad, Path(tempfile.mkdtemp()))
+        with self.assertRaises(impl.ImplRejected):
+            impl.unpack_tree(bad.parent / "missing.txt", Path(tempfile.mkdtemp()))
 
 
 class Impl(Base):
