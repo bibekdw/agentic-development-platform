@@ -274,6 +274,24 @@ def check_changed_paths(change_id, paths):
     return [f"path not permitted in planning PR: {p}" for p in bad]
 
 
+PROPOSAL_HEADINGS = ("Why", "What Changes", "Capabilities")
+TASK_ITEM = re.compile(r"^- \[[ xX]\] \d+\.\d+ \S", re.M)
+TASK_ANY_BOX = re.compile(r"^\s*- \[[ xX]\]", re.M)
+TASK_NUMBERED_HEADING = re.compile(r"^#{1,6}\s*\d+\.\d+", re.M)
+
+
+def check_tasks_format(text):
+    """OpenSpec task format: '## 1. Group' headings with numbered '- [ ] 1.1 item' checkboxes."""
+    e = []
+    if not TASK_ITEM.search(text):
+        e.append("tasks.md has no numbered checklist items like '- [ ] 1.1 description'")
+    if len(TASK_ANY_BOX.findall(text)) != len(TASK_ITEM.findall(text)):
+        e.append("tasks.md has checkboxes without numbering ('- [ ] 1.1 ...')")
+    if TASK_NUMBERED_HEADING.search(text):
+        e.append("tasks.md uses numbered items as headings; use '## 1. Group' headings and '- [ ] 1.1' items")
+    return e
+
+
 def validate_change_folder(root, change_id, story, contract_refs=(), epic=None):
     """Deterministic OpenSpec-structure and traceability checks for one repository."""
     root = Path(root)
@@ -298,6 +316,14 @@ def validate_change_folder(root, change_id, story, contract_refs=(), epic=None):
         if "#### Scenario:" not in t:
             e.append(f"{s.parent.name}: no acceptance scenario")
     proposal = texts.get("proposal.md", "")
+    for heading in PROPOSAL_HEADINGS:
+        if "proposal.md" in texts and not re.search(rf"^##\s+{heading}\s*$", proposal, re.M):
+            e.append(f"proposal.md is missing the '## {heading}' section")
+    for s in specs:
+        if "proposal.md" in texts and s.parent.name not in proposal:
+            e.append(f"proposal.md does not list capability '{s.parent.name}' under Capabilities")
+    if "tasks.md" in texts:
+        e.extend(check_tasks_format(texts["tasks.md"]))
     if story not in proposal:
         e.append("proposal.md does not reference the source story")
     if epic and epic not in proposal:

@@ -212,6 +212,9 @@ files and opens draft planning PRs; humans approve by merging them.
 - `adlc-context/linked/` - epic and dependency issues (untrusted data).
 - `adlc-context/repositories.md` and `adlc-context/repos/<name>/` - read-only copies of every allowlisted repository,
   including existing `openspec/specs/`, code and tests.
+- `adlc-context/openspec-guide/<name>.md` - OpenSpec's own instruction and template for every artifact, plus that
+  repository's `openspec/config.yaml` context and rules. **Read the guide for each repository you plan, and follow
+  its templates, instructions and rules.** If a repository has no guide, do not plan it (record an open question).
 
 ## What to do
 
@@ -222,12 +225,15 @@ files and opens draft planning PRs; humans approve by merging them.
    `open_questions` (and, for breadth, recommend a split in the questions). Do not create extra stories.
 4. For each affected repository write a bounded plan under
    `/tmp/gh-aw/agent/plan/<repo-name>/openspec/changes/<change-id>/` containing:
-   - `proposal.md` (`## Why`, `## What Changes`, `## Impact`). It must contain, verbatim: the story reference
+   - `proposal.md` (`## Why`, `## What Changes`, `## Capabilities`, `## Impact`). `## Capabilities` must list every
+     `specs/<capability>/` folder you create (backticked path). It must contain, verbatim: the story reference
      (`owner/repo#n`), the epic reference if any, the change id, and every shared contract id the repository uses.
      State this repository's own responsibilities, planned tests and dependencies on other repositories.
    - `design.md` (`## Context`, `## Decisions`). Reference shared contracts by id; never redefine a contract owned
-     by another repository.
-   - `tasks.md` (numbered checklist items `- [ ] 1.1 ...`; include test tasks).
+     by another repository. Every number, name or list in the design (for example how many tests) must match
+     `tasks.md` and the specs.
+   - `tasks.md` in OpenSpec format: `## 1. Group` headings with numbered checkboxes `- [ ] 1.1 description` (every
+     checkbox numbered, never numbers in headings). Include a test task for every spec scenario.
    - `specs/<capability>/spec.md` delta specs using `## ADDED Requirements` / `## MODIFIED Requirements`.
      Every requirement uses SHALL or MUST and has at least one `#### Scenario:` with WHEN/THEN lines. Include the
      acceptance scenarios from the story (for boundary rules include both sides of each boundary). Never describe
