@@ -118,6 +118,11 @@ class GitHubClient:
                                    "--search", f'"{key}" in:title', "--json", "number,title,body", "--limit", "50"))
         return match_tracking(data, story_ref, change_id)
 
+    def list_open_tracking_issues(self, platform):
+        """All open coordination issues (used by the scheduled reconcile)."""
+        return json.loads(self._gh("issue", "list", "-R", platform, "--label", LABEL, "--state", "open",
+                                   "--json", "number,title,body", "--limit", "100"))
+
     # ---- writes (never called in dry-run)
     def create_tracking_issue(self, platform, title, body):
         self._gh("label", "create", LABEL, "-R", platform, "--force",
@@ -134,6 +139,8 @@ class GitHubClient:
         mine = [c for c in comments if marker in c["body"]]
         payload = f"{marker}\n{body}"
         if mine:
+            if mine[0]["body"] == payload:
+                return  # unchanged: do not touch the comment (keeps scheduled runs quiet)
             self._gh("api", "-X", "PATCH", f"repos/{repo}/issues/comments/{mine[0]['id']}", "-f", f"body={payload}")
         else:
             self._gh("issue", "comment", str(number), "-R", repo, "--body-file", "-", stdin=payload)
