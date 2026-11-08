@@ -231,7 +231,20 @@ files and opens draft planning PRs; humans approve by merging them.
    - `specs/<capability>/spec.md` delta specs using `## ADDED Requirements` / `## MODIFIED Requirements`.
      Every requirement uses SHALL or MUST and has at least one `#### Scenario:` with WHEN/THEN lines. Include the
      acceptance scenarios from the story (for boundary rules include both sides of each boundary). Never describe
-     unimplemented behavior as current behavior; do not touch `openspec/specs/`.
+     unimplemented behavior as current behavior; do not touch `openspec/specs/`. Use exactly this structure
+     (the `### Requirement:` prefix and `#### Scenario:` prefix are mandatory; no text between the `## ADDED
+     Requirements` heading and the first requirement; no other `###` headings):
+
+     ```markdown
+     ## ADDED Requirements
+
+     ### Requirement: Task title length
+     The system SHALL reject task creation when the title exceeds 200 characters.
+
+     #### Scenario: Title at the limit is accepted
+     - **WHEN** a task is created with a 200-character title
+     - **THEN** the system responds with HTTP 201
+     ```
 5. A contract shared by several repositories (an API, event or schema) has exactly one **authoritative owner**
    repository that defines it in one delta spec file. Consumers reference it by id only.
 6. Write `/tmp/gh-aw/agent/plan/plan.json` **last**, exactly with these keys:
