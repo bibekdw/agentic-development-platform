@@ -146,6 +146,13 @@ def prepare_patched_tree(base_dir, agent_dir, dest_dir, change_id, prof):
     if errs:
         raise ImplRejected(errs)
     dest = Path(dest_dir)
+    apply_changes(dest, changed)
+    return changed
+
+
+def apply_changes(dest, changed):
+    """Write a change set ({rel: bytes|None}) into dest; None deletes the file."""
+    dest = Path(dest)
     for rel, data in changed.items():
         target = dest / rel
         if data is None:
@@ -154,7 +161,62 @@ def prepare_patched_tree(base_dir, agent_dir, dest_dir, change_id, prof):
             continue
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(data)
-    return changed
+
+
+def test_prefixes(prof):
+    return prof.get("test_path_prefixes") or ["src/test/"]
+
+
+def test_file_changes(changed, prof):
+    """Added or modified test files only. Deleted tests are ignored so they cannot hide a failure."""
+    return {rel: data for rel, data in changed.items()
+            if data is not None and any(rel.startswith(x) for x in test_prefixes(prof))}
+
+
+BASELINE_OK = "fails_without_change"
+BASELINE_WARN = "passes_without_change"
+BASELINE_NO_TESTS = "no_test_changes"
+BASELINE_NOT_RUN = "not_run"
+
+
+def baseline_status(baseline):
+    """Classify the fail-before run. `baseline` = {"test_files": [...], "ran": bool, "exit_code": int|None}.
+
+    The new/changed tests are run against the ORIGINAL source. They are expected to fail there (a test
+    failure or a compile error because the code they exercise does not exist yet). If they pass, they do not
+    prove the change.
+    """
+    baseline = baseline if isinstance(baseline, dict) else {}
+    if not baseline.get("test_files"):
+        return BASELINE_NO_TESTS
+    code = baseline.get("exit_code")
+    if not baseline.get("ran") or not isinstance(code, int):
+        return BASELINE_NOT_RUN
+    return BASELINE_WARN if code == 0 else BASELINE_OK
+
+
+def baseline_line(baseline):
+    status = baseline_status(baseline)
+    code = (baseline or {}).get("exit_code")
+    return {
+        BASELINE_OK: f"the new/changed tests FAIL without the implementation (exit {code}), so they exercise the change",
+        BASELINE_WARN: "WARNING: the new/changed tests also PASS without the implementation change. They may not "
+                       "test the change; review the tests closely",
+        BASELINE_NO_TESTS: "WARNING: no test files were added or changed",
+        BASELINE_NOT_RUN: "not run",
+    }[status]
+
+
+def remove_tree(path):
+    """rmtree that also removes read-only files (git objects on Windows)."""
+    import shutil
+    import stat
+
+    def _retry(func, target, _exc):
+        Path(target).chmod(stat.S_IWRITE)
+        func(target)
+    if Path(path).exists():
+        shutil.rmtree(path, onerror=_retry)
 
 
 def unpack_tree(pack_file, dest):
@@ -257,7 +319,8 @@ def record_implementation(rec, repo_full, branch, pr_number, base_sha, verify, r
     rec = copy.deepcopy(rec)
     rec.setdefault("implementation", {})[repo_full] = {
         "branch": branch, "pr": pr_number, "pr_state": "open", "merged_sha": None, "base_sha": base_sha,
-        "verify": {"command": verify.get("command"), "exit_code": verify.get("exit_code")}, "run": run_url}
+        "verify": {"command": verify.get("command"), "exit_code": verify.get("exit_code"),
+                   "baseline": baseline_status(verify.get("baseline"))}, "run": run_url}
     return rec
 
 
@@ -278,6 +341,7 @@ def pr_body(rec, repo_full, changed, verify, run_url, plan_entry):
         f"- Approved plan: PR #{plan_entry.get('plan_pr')} merged at `{(plan_entry.get('merged_sha') or '-')[:12]}`", "",
         "### Changed paths"] + [f"- `{x}`" for x in paths] + ["", "### Verification",
         f"- Command: `{cmd}`", f"- Exit code: {verify.get('exit_code')}",
+        f"- Fail-before check: {baseline_line(verify.get('baseline'))}",
         "- Run by a separate, isolated job on exactly this change set. The implementer's own statements about "
         "tests are not evidence.", "", "### Review checklist",
         "- Behavior matches the acceptance criteria and specs in `openspec/changes/" + rec["change_id"] + "/`",

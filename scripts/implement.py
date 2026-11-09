@@ -139,11 +139,19 @@ def prepare(client, cfg, platform, story_ref, repo_short, agent_dir, out_dir):
         shutil.rmtree(patched)
     shutil.copytree(base, patched, ignore=shutil.ignore_patterns(".git"))
     changed = impl.prepare_patched_tree(patched, agent_dir, patched, cid, prof)
+    # Fail-before tree: ORIGINAL source plus only the added/changed test files. Its run must fail.
+    tests = impl.test_file_changes(changed, prof)
+    baseline = out / "baseline"
+    if baseline.exists():
+        shutil.rmtree(baseline)
+    if tests:
+        shutil.copytree(base, baseline, ignore=shutil.ignore_patterns(".git"))
+        impl.apply_changes(baseline, tests)
     _remove(base)
     (out / "verify.json").write_text(json.dumps({"image": prof["verify"]["image"], "command": prof["verify"]["command"],
                                                  "timeout_minutes": prof["verify"].get("timeout_minutes", 20),
-                                                 "changed": sorted(changed)}, indent=2))
-    return {"change_id": cid, "changed": sorted(changed)}
+                                                 "changed": sorted(changed), "test_files": sorted(tests)}, indent=2))
+    return {"change_id": cid, "changed": sorted(changed), "test_files": sorted(tests)}
 
 
 def publish(client, cfg, platform, story_ref, repo_short, agent_dir, verify, run_url, dry_run, out_dir, workdir):
@@ -189,7 +197,10 @@ def publish(client, cfg, platform, story_ref, repo_short, agent_dir, verify, run
     git(base, "checkout", "-q", "-b", branch)
     git(base, "add", "-A")
     git(base, "commit", "-q", "-m", f"ADLC implementation {cid}")
-    verify_info = {"command": verify.get("command"), "exit_code": exit_code}
+    verify_info = {"command": verify.get("command"), "exit_code": exit_code,
+                   "baseline": {"test_files": sorted(impl.test_file_changes(changed, prof)),
+                                "ran": bool((verify.get("baseline") or {}).get("ran")),
+                                "exit_code": (verify.get("baseline") or {}).get("exit_code")}}
     result = {"change_id": cid, "failures": [], "changed": sorted(changed), "branch": branch}
     if dry_run:
         pr_number = None

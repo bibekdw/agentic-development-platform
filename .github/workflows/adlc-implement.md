@@ -208,8 +208,22 @@ safe-outputs:
               -v "$PREP/patched:/work" -w /work "$IMAGE" "${CMD[@]}" 2>&1 | tee "$RUNNER_TEMP/verify.log"
             RC="${PIPESTATUS[0]}"
             docker rm -f adlc-verify >/dev/null 2>&1
-            jq -n --argjson rc "$RC" --slurpfile v "$PREP/verify.json" \
-              '{exit_code: $rc, command: $v[0].command, image: $v[0].image}' > "$RUNNER_TEMP/verify-result.json"
+            # Fail-before check: the same command on the ORIGINAL source + only the new/changed test files.
+            # It is expected to fail. Same isolation, no credentials. Its result is a signal, not a gate.
+            BRAN=false; BRC=null
+            if [ -d "$PREP/baseline" ]; then
+              chmod -R a+rwX "$PREP/baseline"
+              timeout "${MINUTES}m" docker run --rm --name adlc-baseline --user 1000:1000 \
+                --cap-drop ALL --security-opt no-new-privileges --pids-limit 1024 --memory 6g \
+                -e HOME=/tmp -e MAVEN_ARGS=-Dmaven.repo.local=/tmp/m2 \
+                -v "$PREP/baseline:/work" -w /work "$IMAGE" "${CMD[@]}" > "$RUNNER_TEMP/baseline.log" 2>&1
+              BRC=$?
+              BRAN=true
+              docker rm -f adlc-baseline >/dev/null 2>&1
+            fi
+            jq -n --argjson rc "$RC" --argjson bran "$BRAN" --argjson brc "$BRC" --slurpfile v "$PREP/verify.json" \
+              '{exit_code: $rc, command: $v[0].command, image: $v[0].image,
+                baseline: {ran: $bran, exit_code: $brc, test_files: $v[0].test_files}}' > "$RUNNER_TEMP/verify-result.json"
             exit 0
         - id: app_write
           if: ${{ inputs.dry_run != true }}
@@ -244,6 +258,7 @@ safe-outputs:
             path: |
               ${{ runner.temp }}/prepare.log
               ${{ runner.temp }}/verify.log
+              ${{ runner.temp }}/baseline.log
               ${{ runner.temp }}/verify-result.json
               ${{ runner.temp }}/publish.log
               ${{ runner.temp }}/adlc-out/

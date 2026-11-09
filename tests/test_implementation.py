@@ -334,5 +334,63 @@ class Lifecycle(Impl):
         self.assertEqual(p.implementation_status(rec)[0], p.STATUS_IMPLEMENTED)
 
 
+class BaselineStatus(unittest.TestCase):
+    def test_matrix(self):
+        f = {"test_files": ["src/test/A.java"]}
+        self.assertEqual(impl.baseline_status(None), impl.BASELINE_NO_TESTS)
+        self.assertEqual(impl.baseline_status({"test_files": []}), impl.BASELINE_NO_TESTS)
+        self.assertEqual(impl.baseline_status(dict(f)), impl.BASELINE_NOT_RUN)
+        self.assertEqual(impl.baseline_status(dict(f, ran=True, exit_code=None)), impl.BASELINE_NOT_RUN)
+        self.assertEqual(impl.baseline_status(dict(f, ran=True, exit_code=1)), impl.BASELINE_OK)
+        self.assertEqual(impl.baseline_status(dict(f, ran=True, exit_code=0)), impl.BASELINE_WARN)
+
+    def test_only_added_or_changed_tests_count(self):
+        changed = {"src/test/A.java": b"x", "src/test/Gone.java": None, "src/main/B.java": b"y"}
+        self.assertEqual(set(impl.test_file_changes(changed, PROF)), {"src/test/A.java"})
+
+
+class FailBefore(Impl):
+    def test_prepare_builds_tests_only_baseline_tree(self):
+        ref, cid = self.ready()
+        tree = self.agent_tree(ref, files={"src/main/Limit.java": "class Limit {}\n",
+                                           "src/test/LimitTest.java": "class LimitTest {}\n"})
+        out = self.tmp / "prep2"
+        res = ic.prepare(self.c, ICFG, PLATFORM, ref, "adlc-sample-backend", tree, out)
+        self.assertEqual(res["test_files"], ["src/test/LimitTest.java"])
+        self.assertTrue((out / "baseline" / "src/test/LimitTest.java").is_file())
+        self.assertFalse((out / "baseline" / "src/main/Limit.java").exists())
+        self.assertTrue((out / "patched" / "src/main/Limit.java").is_file())
+        self.assertEqual(json.loads((out / "verify.json").read_text())["test_files"], ["src/test/LimitTest.java"])
+
+    def test_no_baseline_tree_without_test_changes(self):
+        ref, _ = self.ready()
+        out = self.tmp / "prep3"
+        ic.prepare(self.c, ICFG, PLATFORM, ref, "adlc-sample-backend", self.agent_tree(ref), out)
+        self.assertFalse((out / "baseline").exists())
+
+    def publish_with(self, baseline, ref=None):
+        ref = ref or self.ready()[0]
+        tree = self.agent_tree(ref, files={"src/main/Limit.java": "class Limit {}\n",
+                                           "src/test/LimitTest.java": "class LimitTest {}\n"})
+        res = self.publish(ref, tree, verify=dict(OK, baseline=baseline))
+        rec = p.parse_record_block(self.c.tracking[0]["body"])
+        return res, rec["implementation"][BACKEND]["verify"]["baseline"], self.c.prs[(BACKEND, res["branch"])]["body"]
+
+    def test_pass_without_change_is_flagged_but_not_blocked(self):
+        res, status, body = self.publish_with({"ran": True, "exit_code": 0})
+        self.assertEqual(res["failures"], [])
+        self.assertEqual(status, impl.BASELINE_WARN)
+        self.assertIn("also PASS without the implementation", body)
+
+    def test_fail_before_is_recorded(self):
+        _, status, body = self.publish_with({"ran": True, "exit_code": 1})
+        self.assertEqual(status, impl.BASELINE_OK)
+        self.assertIn("FAIL without the implementation", body)
+
+    def test_agent_cannot_claim_test_files_via_verify_result(self):
+        res, status, _ = self.publish_with({"ran": True, "exit_code": 1, "test_files": []})
+        self.assertEqual(status, impl.BASELINE_OK)  # test files are derived from the validated diff
+
+
 if __name__ == "__main__":
     unittest.main()
