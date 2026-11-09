@@ -27,7 +27,7 @@ workflow_dispatch(story_repo, story_number, dry_run)
   -> agent job       (context built with read-only token; agent writes plan files)
   -> submit_plan job (threat detection gate; validate; publish draft PRs; tracking issue; story status comment)
 maintainer reviews + manually merges each planning PR   (merge == approval of that repo's plan)
-reconcile workflow (every 15 minutes, or run by hand) -> refreshes PR states -> records merged SHA + approved revision -> Ready for implementation
+reconcile workflow (run by hand) -> refreshes PR states -> records merged SHA + approved revision -> Ready for implementation
 ```
 
 * Change ID: `<repo>-<issue>-<slug>` (`adlc-sample-backend-12-...`, max 64 chars), computed once from the story
@@ -77,7 +77,7 @@ repositories in `configs/repositories.json` (`scripts/app_scope.py`), with per-s
 | Read story, comments, specs, code | preflight, agent pre-step (context) | contents, issues, pull requests: **read** |
 | Post clarification questions | preflight (live runs only) | issues: write (+ contents/pull requests read) |
 | Write planning branches, draft PRs, tracking issue, status comment | `submit_plan` (live runs only) | contents, pull requests, issues: **write** |
-| Reconcile | reconcile workflow (scheduled and manual; not in dry runs) | issues: write (+ read) |
+| Reconcile | reconcile workflow (manual; not in dry runs) | issues: write (+ read) |
 | Dry runs | all | read only |
 
 Planning PR validation runs because PRs are opened with the App token (PRs opened with `GITHUB_TOKEN` do not trigger
@@ -91,12 +91,13 @@ Bounds: agent step 30 min, `max-turns: 40`, `max-ai-credits: 500`, 3 runs/user/h
 concurrency group `adlc-planning-global` (one planning or reconcile run at a time). Diagnostics are uploaded with
 `if: always()`.
 
-Scheduled reconcile: `reconcile.yml` runs every 15 minutes on `main` with `--all`. It reconciles every open
-coordination issue, skips changes already Ready for implementation or cancelled, rewrites the tracking issue and
-status comment only when something changed, and keeps going if one change fails (the run then ends red and names the
-failing change). It only reads PR state and writes the tracking issue and the story status comment; it cannot merge or
-edit PRs. To reconcile one change immediately, dispatch it with the change id. GitHub disables scheduled workflows
-after 60 days without repository activity; re-enable it from the Actions tab if that happens.
+Manual reconcile: `reconcile.yml` is dispatched by hand and never runs by itself (it has no schedule). Dispatch it with a
+change id to reconcile one change, or leave the change id empty to reconcile every open coordination issue (`--all`). It
+skips changes already Implemented or cancelled (and Ready ones with no implementation started), rewrites the tracking
+issue and status comment only when something changed, and keeps going if one change fails (the run then ends red and
+names the failing change). It only reads PR state and writes the tracking issue and the story status comment; it cannot
+merge or edit PRs. Run it after merging a plan or implementation PR; until you do, the status comment and the
+coordination record do not move (for example, a merged plan stays "Plan under review" and the implement gate refuses).
 
 ## One-time GitHub App setup (you perform; nothing here creates credentials)
 

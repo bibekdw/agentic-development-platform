@@ -72,16 +72,18 @@ class RepoPolicy(unittest.TestCase):
             for trigger in ("issues:", "issue_comment:", "pull_request:", "push:"):
                 self.assertNotRegex(body.split("jobs:")[0], rf"^\s*{trigger}", f.name)
 
-    def test_reconcile_schedule_is_bounded_and_planner_is_not_scheduled(self):
+    def test_nothing_is_scheduled_and_reconcile_is_manual_only(self):
         reconcile = text(WORKFLOWS / "reconcile.yml")
         head = reconcile.split("jobs:")[0]
-        self.assertRegex(head, r'(?m)^\s*-\s*cron:\s*"\*/(5|10|15|20|30) \* \* \* \*"')
-        self.assertEqual(len(re.findall(r"cron:", head)), 1)
+        self.assertIn("workflow_dispatch:", head)
+        self.assertNotIn("schedule:", head)
+        self.assertNotIn("cron:", head)
         self.assertIn("--all", reconcile)
         self.assertRegex(reconcile, r"(?m)^permissions:\n  contents: read\n")
-        front = text(WORKFLOWS / "adlc-plan-story.md").split("---")[1]
-        self.assertNotIn("schedule:", front)
-        self.assertNotIn("cron:", front)
+        for f in WORKFLOWS.glob("adlc-*.md"):
+            front = text(f).split("---")[1]
+            self.assertNotIn("schedule:", front, f.name)
+            self.assertNotIn("cron:", front, f.name)
 
     def test_planner_is_bounded_and_serialized(self):
         body = text(WORKFLOWS / "adlc-plan-story.md")
