@@ -20,6 +20,11 @@ on:
         required: true
         type: boolean
         default: true
+      run_review:
+        description: "After a live run opens the draft PR, start the advisory review (adlc-review) for it"
+        required: true
+        type: boolean
+        default: true
 permissions:
   copilot-requests: write
   contents: read
@@ -141,6 +146,7 @@ safe-outputs:
       output: "Implementation submitted for validation"
       permissions:
         contents: read
+        actions: write   # only used by the final dispatch step, with the workflow's own token (never the App token)
       artifacts:
         - /tmp/gh-aw/agent/impl/
       inputs:
@@ -251,6 +257,26 @@ safe-outputs:
               --verify-result "$RUNNER_TEMP/verify-result.json" --run-url "$RUN_URL" --out "$RUNNER_TEMP/adlc-out")
             if [ "$DRY_RUN" = "true" ]; then ARGS+=(--dry-run); fi
             python3 scripts/implement.py publish "${ARGS[@]}" 2>&1 | tee "$RUNNER_TEMP/publish.log"
+        # Start the advisory review for the PR just opened. Runs only after a successful LIVE publish (the step above
+        # fails the job when verification failed or nothing was published). Uses the workflow's own token, limited to
+        # dispatching a workflow in this repository; the GitHub App token is never passed here. adlc-review runs its own
+        # gate and is comment-only.
+        - name: Start the advisory review
+          if: ${{ inputs.dry_run != true && inputs.run_review == true }}
+          env:
+            GH_TOKEN: ${{ github.token }}
+            STORY_REPO: ${{ inputs.story_repo }}
+            STORY_NUMBER: ${{ inputs.story_number }}
+            TARGET: ${{ inputs.repo }}
+            REQUESTED_BY: ${{ github.actor }}
+          run: |
+            set -euo pipefail
+            PR="$(jq -r '.pr.number // empty' "$RUNNER_TEMP/adlc-out/result.json")"
+            [[ "$PR" =~ ^[0-9]+$ ]] || { echo "no PR was created; not starting a review"; exit 0; }
+            gh workflow run adlc-review.lock.yml -R "$GITHUB_REPOSITORY" \
+              -f story_repo="$STORY_REPO" -f story_number="$STORY_NUMBER" -f repo="$TARGET" \
+              -f pr_number="$PR" -f requested_by="$REQUESTED_BY" -f dry_run=false
+            echo "advisory review requested for PR #$PR"
         - if: always()
           uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
           with:

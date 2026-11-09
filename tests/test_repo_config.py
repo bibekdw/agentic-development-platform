@@ -202,6 +202,43 @@ class ReviewWorkflowPolicy(unittest.TestCase):
         self.assertIn("scripts/mask_token.py", body)
 
 
+class ReviewChaining(unittest.TestCase):
+    IMPL = WORKFLOWS / "adlc-implement.md"
+    REVIEW = WORKFLOWS / "adlc-review.md"
+
+    def step(self):
+        body = text(self.IMPL)
+        return body.split("- name: Start the advisory review")[1].split("- if: always()")[0]
+
+    def test_review_is_started_only_after_a_live_successful_publish(self):
+        body = text(self.IMPL)
+        self.assertLess(body.index("python3 scripts/implement.py publish"), body.index("Start the advisory review"))
+        step = self.step()
+        self.assertIn("inputs.dry_run != true", step)
+        self.assertIn("inputs.run_review == true", step)
+        self.assertNotIn("continue-on-error", step)
+        self.assertRegex(text(self.IMPL).split("permissions:")[0], r"run_review:[\s\S]*?default: true")
+
+    def test_dispatch_uses_only_the_workflow_token_never_the_app_token(self):
+        step = self.step()
+        self.assertIn("GH_TOKEN: ${{ github.token }}", step)
+        self.assertNotIn("steps.app", step)
+        self.assertNotIn("secrets.", step)
+        self.assertIn("gh workflow run adlc-review.lock.yml", step)
+        self.assertIn("-f dry_run=false", step)
+
+    def test_actions_write_is_confined_and_not_given_to_the_app(self):
+        body = text(self.IMPL)
+        self.assertEqual(len(re.findall(r"(?m)^\s+actions:\s*write", body)), 1)
+        self.assertNotRegex(body, r"permission-actions")
+        self.assertNotRegex(text(self.REVIEW), r"(?m)^\s+actions:\s*write")
+
+    def test_requested_by_is_honoured_only_for_the_actions_bot(self):
+        body = text(self.REVIEW)
+        self.assertIn("github.actor == 'github-actions[bot]'", body)
+        self.assertRegex(body, r"requested_by:[\s\S]*?required: false")
+
+
 class TokenHygiene(unittest.TestCase):
     def test_runner_mask_command_is_never_printed_by_library_code(self):
         for f in (ROOT / "scripts").glob("*.py"):

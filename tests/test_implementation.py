@@ -391,6 +391,20 @@ class FailBefore(Impl):
         res, status, _ = self.publish_with({"ran": True, "exit_code": 1, "test_files": []})
         self.assertEqual(status, impl.BASELINE_OK)  # test files are derived from the validated diff
 
+    def test_result_json_carries_the_pr_number_for_the_review_dispatch(self):
+        ref, cid = self.ready()
+        out = self.tmp / "live-out"
+        self.publish(ref, self.agent_tree(ref), out=out)
+        result = json.loads((out / "result.json").read_text())
+        branch = impl.implementation_branch(cid)
+        self.assertEqual(result["pr"]["number"], self.c.prs[(BACKEND, branch)]["number"])
+
+    def test_dry_run_result_has_no_pr_so_no_review_is_started(self):
+        ref, _ = self.ready()
+        out = self.tmp / "dry-out"
+        self.publish(ref, self.agent_tree(ref), dry_run=True, out=out)
+        self.assertNotIn("pr", json.loads((out / "result.json").read_text()))
+
 
 if __name__ == "__main__":
     unittest.main()

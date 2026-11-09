@@ -19,6 +19,11 @@ on:
         description: "Implementation PR number in that repository"
         required: true
         type: string
+      requested_by:
+        description: "Set only by adlc-implement when it starts the review; honoured only when the run actor is the Actions bot"
+        required: false
+        type: string
+        default: ""
       dry_run:
         description: "Review only; post nothing to GitHub"
         required: true
@@ -73,7 +78,9 @@ jobs:
           STORY: ${{ inputs.story_repo }}#${{ inputs.story_number }}
           TARGET: ${{ inputs.repo }}
           PR: ${{ inputs.pr_number }}
-          ACTOR: ${{ github.actor }}
+          # A person dispatching by hand is checked as themselves. When adlc-implement starts the review with the
+          # workflow token the actor can be the Actions bot, so the person who started the implementation is checked.
+          ACTOR: ${{ (github.actor == 'github-actions[bot]' && inputs.requested_by != '') && inputs.requested_by || github.actor }}
         run: |
           python3 scripts/mask_token.py
           python3 scripts/review.py gate --story "$STORY" --repo "$TARGET" --pr "$PR" --platform "$GITHUB_REPOSITORY" --actor "$ACTOR" | tee "$RUNNER_TEMP/gate.json" || true

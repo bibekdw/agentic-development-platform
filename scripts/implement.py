@@ -223,6 +223,7 @@ def publish(client, cfg, platform, story_ref, repo_short, agent_dir, verify, run
         (out / "status-comment.md").write_text(comment)
         (out / "pr.md").write_text(f"# {impl.pr_title(rec, repo_full)}\n\n"
                                    + impl.pr_body(rec, repo_full, changed, verify_info, run_url, plan_entry))
+        (out / "result.json").write_text(impl.dumps(result))
     return result
 
 

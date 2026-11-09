@@ -166,3 +166,7 @@ Manual workflow (inputs: story repo, story number, target repo, PR number, dry r
 - Rubric (from OpenSpec's verify skill): completeness (ticked tasks vs evidence), correctness (every spec scenario vs a test that would fail without the change, requirements vs code), coherence (scope of every changed file, design and repo rules), plus risks and assumptions.
 - Deterministic code validates the schema, derives the recommendation from the findings (the agent cannot set it), reconciles the scope table with the real diff, neutralises markup (no HTML, links, mentions), and posts ONE comment per change, edited in place.
 - The comment is advisory: no approval, no request-changes, no blocking, no merge. The comment-only token cannot write repository contents.
+
+### Automatic review after a live implementation
+
+`adlc-implement` has an input `run_review` (default true). After a LIVE run has published the draft PR (never on a dry run, never when verification failed), a final step starts `adlc-review` for that PR with `gh workflow run` using the workflow's own token (`actions: write` on this repository only; the GitHub App token is not involved). The review runs its own gate and stays comment-only. When the dispatch comes from the Actions bot, `requested_by` (the person who started the implementation) is checked instead of the bot; a person dispatching by hand is always checked as themselves. Set `run_review` to false to skip it.
