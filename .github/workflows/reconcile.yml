@@ -1,11 +1,10 @@
 name: adlc-reconcile
 # Refresh planning PR states, record approvals (merged SHA + revision), recompute readiness,
 # update the tracking issue and the single story status comment.
-# Runs on a schedule for every open coordination issue (already Ready or cancelled ones are skipped,
-# unchanged ones are not rewritten) and can be dispatched by hand for one change or for all.
+# Manual only: nothing runs by itself. Dispatch it by hand for one change (change_id) or for every open change
+# (leave change_id empty). Changes that are already Implemented or cancelled, or Ready with no implementation
+# started, are skipped; unchanged records are not rewritten.
 on:
-  schedule:
-    - cron: "*/15 * * * *"
   workflow_dispatch:
     inputs:
       change_id:

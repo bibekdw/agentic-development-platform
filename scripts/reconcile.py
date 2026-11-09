@@ -3,7 +3,7 @@
 
 Usage:
   reconcile.py <platform-owner/repo> <change_id> [--dry-run]    one change
-  reconcile.py <platform-owner/repo> --all [--dry-run]          every open coordination issue (scheduled run)
+  reconcile.py <platform-owner/repo> --all [--dry-run]          every open coordination issue
 
 Reads PR states, records approvals (merged SHA + revision), recomputes the deterministic
 status and updates the tracking issue and the single story status comment. It never merges,
