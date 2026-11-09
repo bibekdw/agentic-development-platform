@@ -151,6 +151,10 @@ class GitHubClient:
                        "--body-file", "-", "--draft", stdin=body).strip().splitlines()[-1]
         return {"number": int(url.rstrip("/").rsplit("/", 1)[1]), "url": url}
 
+    def get_pr_diff(self, repo, number):
+        """Unified diff of a PR as GitHub computes it (read-only)."""
+        return self._gh("pr", "diff", str(number), "-R", repo)
+
     def update_pr_body(self, repo, number, body):
         self._gh("pr", "edit", str(number), "-R", repo, "--body-file", "-", stdin=body)
 

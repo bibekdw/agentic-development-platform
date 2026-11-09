@@ -154,3 +154,15 @@ Manual workflow `adlc-implement` (inputs: story repo, story number, target repo,
 6. The repo's own CI runs; a human reviews and merges. `reconcile` then records "Implementation in review" -> "Implemented" (all affected repos merged).
 
 Retry after a failure is a manual re-dispatch. Merging the implementation PR is the acceptance of the code; nothing is merged or deployed automatically.
+
+### Fail-before check (in the isolated verify step)
+
+The new or changed test files (`test_path_prefixes`, default `src/test/`) are also run against the ORIGINAL source. They are expected to fail there. The PR body and the record show the result: `fails_without_change` (good), `passes_without_change` (the tests may not test the change), `no_test_changes`. It is a visible signal, not a gate.
+
+## Advisory AI review (`adlc-review`)
+
+Manual workflow (inputs: story repo, story number, target repo, PR number, dry run - default true). The reviewer reads the approved spec, the PR diff, a read-only copy of the repo at the PR head and the platform's deterministic evidence (verify exit code, fail-before result). It has no network, no build tools and no credentials, and writes one structured `review.json`.
+
+- Rubric (from OpenSpec's verify skill): completeness (ticked tasks vs evidence), correctness (every spec scenario vs a test that would fail without the change, requirements vs code), coherence (scope of every changed file, design and repo rules), plus risks and assumptions.
+- Deterministic code validates the schema, derives the recommendation from the findings (the agent cannot set it), reconciles the scope table with the real diff, neutralises markup (no HTML, links, mentions), and posts ONE comment per change, edited in place.
+- The comment is advisory: no approval, no request-changes, no blocking, no merge. The comment-only token cannot write repository contents.

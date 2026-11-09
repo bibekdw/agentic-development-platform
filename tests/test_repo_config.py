@@ -165,6 +165,43 @@ class ImplementWorkflowPolicy(unittest.TestCase):
             self.assertTrue(prefix.endswith("/"))
 
 
+class ReviewWorkflowPolicy(unittest.TestCase):
+    MD = WORKFLOWS / "adlc-review.md"
+
+    def front(self):
+        return text(self.MD).split("---")[1]
+
+    def test_manual_only_dry_run_default_bounded_and_pinned(self):
+        front = self.front()
+        trigger = front.split("permissions:")[0]
+        self.assertIn("workflow_dispatch", trigger)
+        for t in ("schedule:", "cron:", "issues:", "issue_comment:", "pull_request:", "push:"):
+            self.assertNotRegex(trigger, rf"(?m)^\s*{t}")
+        self.assertRegex(front, r"dry_run:[\s\S]*?default: true")
+        for key in ("timeout-minutes:", "max-turns:", "max-ai-credits:", "adlc-planning-global"):
+            self.assertIn(key, front)
+        for m in re.finditer(r"uses:\s*([^\s#]+)", text(self.MD)):
+            self.assertRegex(m.group(1), r"@[0-9a-f]{40}$", m.group(1))
+
+    def test_agent_is_read_only_without_network_or_build_tools(self):
+        front = self.front()
+        agent_part = front.split("safe-outputs:")[0]
+        self.assertNotIn("network:", agent_part)  # default network only; no package registries
+        self.assertNotRegex(agent_part, r'"(mvn|curl|wget|git|gh|python3?|npm|npx|bash|sh)"')
+        self.assertNotIn("github:", agent_part.split("tools:")[1].split("jobs:")[0])
+        for forbidden in ("create-pull-request", "merge-pull-request", "create-issue: true", "add-comment",
+                          "submit-pull-request-review", "pull-request-review"):
+            self.assertNotIn(forbidden, front)
+
+    def test_comment_token_cannot_write_contents(self):
+        body = text(self.MD)
+        safe = body.split("submit-review:")[1].split("steps:")[1]
+        self.assertNotIn("permission-contents: write", safe)
+        self.assertNotIn("secrets.", body.replace("secrets.ADLC_APP_PRIVATE_KEY", ""))
+        self.assertNotRegex(body, r"permission-(administration|workflows|actions)\s*:\s*write")
+        self.assertIn("scripts/mask_token.py", body)
+
+
 class TokenHygiene(unittest.TestCase):
     def test_runner_mask_command_is_never_printed_by_library_code(self):
         for f in (ROOT / "scripts").glob("*.py"):
